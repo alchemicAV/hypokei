@@ -1567,8 +1567,8 @@ const HarmonicFrequencyExplorer = () => {
 				This tool helps to visualize these connections.
 				</p>
 				<p>	
-				For an immediate idea of what it is doing, check the "Just Intonation" setting and then "12-tone Equal Temperament" (the modern music scale) in Log Scale. Note how the method of generating a scale
-				have very different structures.
+				For an immediate idea of what it is doing, check the "Just Intonation" setting and then "12-tone Equal Temperament" (the modern music scale) in the Log Scale on Side View. 
+				Note how the method of generating a scale have very different structures.
 				</p>
 				<p>The notation H^n(f) represents n recursive applications of the harmonic function to the base frequency f. See the paper for more details.</p>
 				<p><strong>Tree View:</strong> Each frequency node can be expanded to show its harmonic children. Colors represent different recursion levels (H^0, H^1, etc.). Click any frequency to explore its recursive harmonic structure. Capped at 3 levels.</p>
