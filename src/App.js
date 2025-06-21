@@ -1564,7 +1564,9 @@ const HarmonicFrequencyExplorer = () => {
 				</ul>
 				<p>
 				Everything has a fundamental frequency, and with that frequency comes a set of harmonics which has a relationship with every other tone that could exist. This is also true for musical scales.
-				This tool helps to visualize these connections. <Br>
+				This tool helps to visualize these connections.
+				</p>
+				<p>	
 				For an immediate idea of what it is doing, check the "Just Intonation" setting and then "12-tone Equal Temperament" (the modern music scale) in Log Scale. Note how the method of generating a scale
 				have very different structures.
 				</p>
