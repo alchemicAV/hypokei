@@ -1549,23 +1549,24 @@ const HarmonicFrequencyExplorer = () => {
 
 	return (
 		<div className="app" style={appStyles}>
-			<h1 className="app-title">Harmonic Frequency Explorer</h1>
+			<h1 className="app-title">Hypokei Explorer</h1>
 			
 			{/* About Section */}
 			<div className="window about-window">
-				<h2 className="section-title">The Recursive Harmonic Function</h2>
+				<h2 className="section-title">The Hypokei Function</h2>
 				<p>This tool explores recursive harmonic relationships in frequency space, allowing you to:</p>
 				<ul>
 					<li>Generate frequency sets using harmonic series, Just Intonation ratios, 12-tone equal temperament, or custom ratios</li>
 					<li>Apply recursive transformations to explore complex harmonic structures</li>
 					<li>Explore the convergence of acoustic physics and musical harmony</li>
 					<li>Visualize hierarchical relationships between frequencies</li>
+					<li>Use a custom sequence of numbers and explore the relationships between iterations of the set (for example, the Fibonacci Sequence)</li>
 				</ul>
 				<p>
-				Everything has a fundamental frequency, and with that frequency comes a set of harmonics which has a relationship with every other tone that could exist. This tool
-				helps to visualize these connections.
+				Everything has a fundamental frequency, and with that frequency comes a set of harmonics which has a relationship with every other tone that could exist. This is also true for musical scales.
+				This tool helps to visualize these connections.
 				</p>
-				<p>The notation H^n(f) represents n recursive applications of the harmonic function to the base frequency f.</p>
+				<p>The notation H^n(f) represents n recursive applications of the harmonic function to the base frequency f. See the paper for more details.</p>
 				<p><strong>Tree View:</strong> Each frequency node can be expanded to show its harmonic children. Colors represent different recursion levels (H^0, H^1, etc.). Click any frequency to explore its recursive harmonic structure. Capped at 3 levels.</p>
 				<p><strong>Side View:</strong> Shows all generated frequencies plotted on a linear or logarithmic scale, color-coded by recursion level.</p>
 			</div>
