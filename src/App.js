@@ -183,6 +183,385 @@ const flattenFrequencies = (structure) => {
 	return allFreqs.map(item => item.frequency);
 };
 
+// BFS Pathfinding Algorithm
+const findShortestHarmonicPath = (sourceFreq, targetFreq, options = {}) => {
+	const {
+		tolerance = 0.01,
+		maxSteps = 5,
+		maxRecursionDepth = 3,
+		maxFrequencies = 16,
+		mode = "harmonic",
+		customRatios = null,
+		useSubharmonics = false
+	} = options;
+
+	// Check if source is already within tolerance
+	const relDiff = Math.abs(sourceFreq - targetFreq) / Math.max(sourceFreq, targetFreq);
+	if (relDiff < tolerance) {
+		return {
+			found: true,
+			path: [{ frequency: sourceFreq, step: "Start" }],
+			totalSteps: 0,
+			treeCount: 0,
+			finalError: relDiff
+		};
+	}
+
+	// BFS Queue: {frequency, path, stepCount, treeCount}
+	const queue = [{
+		frequency: sourceFreq,
+		path: [{ frequency: sourceFreq, step: "Start" }],
+		stepCount: 0,
+		treeCount: 0
+	}];
+
+	// Visited set to avoid cycles (with tolerance for floating point)
+	const visited = new Set();
+	const addToVisited = (freq) => {
+		visited.add(Math.round(freq * 1000) / 1000); // Round to 3 decimal places
+	};
+	const isVisited = (freq) => {
+		return visited.has(Math.round(freq * 1000) / 1000);
+	};
+
+	addToVisited(sourceFreq);
+	let exploredCount = 0;
+
+	while (queue.length > 0 && exploredCount < maxFrequencies) {
+		const current = queue.shift();
+		exploredCount++;
+
+		// Don't explore further if we've reached max steps
+		if (current.stepCount >= maxSteps) {
+			continue;
+		}
+
+		// Generate all possible next frequencies
+		const nextFrequencies = [];
+
+		// 1. Generate harmonic tree from current frequency
+		try {
+			const structure = generateHarmonicStructure(
+				current.frequency, 
+				maxRecursionDepth, 
+				12, // Use 12 harmonics per level
+				mode,
+				customRatios
+			);
+
+			const allFreqs = extractAllFrequenciesWithPaths(structure);
+			
+			// Add all frequencies from the generated tree
+			allFreqs.forEach(freqData => {
+				if (freqData.level >= 0 && freqData.frequency !== current.frequency) { // Skip base frequency
+					nextFrequencies.push({
+						frequency: freqData.frequency,
+						step: `Tree→${freqData.pathString}`,
+						isNewTree: true
+					});
+				}
+			});
+		} catch (error) {
+			console.error("Error generating harmonic structure:", error);
+		}
+
+		// 2. Add octave divisions (backtracking)
+		if (useSubharmonics) {
+			// Full subharmonics: f/2, f/3, f/5, f/7, f/11, f/13
+			const subharmonics = [2, 3, 5, 7, 11, 13];
+			subharmonics.forEach(divisor => {
+				const newFreq = current.frequency / divisor;
+				if (newFreq > 20) { // Keep above human hearing range
+					nextFrequencies.push({
+						frequency: newFreq,
+						step: `÷${divisor}`,
+						isNewTree: false
+					});
+				}
+			});
+		} else {
+			// Simple octaves: f/2, f/4, f/8
+			for (let octave = 1; octave <= 3; octave++) {
+				const divisor = Math.pow(2, octave);
+				const newFreq = current.frequency / divisor;
+				if (newFreq > 20) {
+					nextFrequencies.push({
+						frequency: newFreq,
+						step: `÷${divisor}`,
+						isNewTree: false
+					});
+				}
+			}
+		}
+
+		// 3. Process all next frequencies
+		for (const next of nextFrequencies) {
+			if (isVisited(next.frequency)) {
+				continue;
+			}
+
+			// Check if we've reached the target
+			const errorRatio = Math.abs(next.frequency - targetFreq) / Math.max(next.frequency, targetFreq);
+			if (errorRatio < tolerance) {
+				// Found target!
+				const finalPath = [...current.path, {
+					frequency: next.frequency,
+					step: next.step
+				}];
+
+				return {
+					found: true,
+					path: finalPath,
+					totalSteps: current.stepCount + 1,
+					treeCount: current.treeCount + (next.isNewTree ? 1 : 0),
+					finalError: errorRatio,
+					exploredFrequencies: exploredCount
+				};
+			}
+
+			// Add to queue for further exploration
+			addToVisited(next.frequency);
+			queue.push({
+				frequency: next.frequency,
+				path: [...current.path, {
+					frequency: next.frequency,
+					step: next.step
+				}],
+				stepCount: current.stepCount + 1,
+				treeCount: current.treeCount + (next.isNewTree ? 1 : 0)
+			});
+		}
+	}
+
+	// No path found within constraints
+	return {
+		found: false,
+		path: [],
+		totalSteps: 0,
+		treeCount: 0,
+		finalError: 1,
+		exploredFrequencies: exploredCount,
+		reason: exploredCount >= maxFrequencies ? "Max frequencies explored" : "Max steps reached"
+	};
+};
+
+// Frequency Pathfinding Component
+const FrequencyPathfinding = ({ mode, customRatios }) => {
+	const [sourceFreq, setSourceFreq] = useState(440);
+	const [targetFreq, setTargetFreq] = useState(660);
+	const [tolerance, setTolerance] = useState(0.01);
+	const [maxSteps, setMaxSteps] = useState(5);
+	const [maxRecursionDepth, setMaxRecursionDepth] = useState(3);
+	const [maxFrequencies, setMaxFrequencies] = useState(16);
+	const [useSubharmonics, setUseSubharmonics] = useState(false);
+	const [pathResult, setPathResult] = useState(null);
+	const [isSearching, setIsSearching] = useState(false);
+
+	const handleSearch = () => {
+		setIsSearching(true);
+		
+		// Add a small delay to allow UI to update
+		setTimeout(() => {
+			try {
+				const result = findShortestHarmonicPath(
+					parseFloat(sourceFreq),
+					parseFloat(targetFreq),
+					{
+						tolerance: tolerance / 100, // Convert percentage to decimal
+						maxSteps: parseInt(maxSteps),
+						maxRecursionDepth: parseInt(maxRecursionDepth),
+						maxFrequencies: parseInt(maxFrequencies),
+						mode: mode,
+						customRatios: customRatios,
+						useSubharmonics: useSubharmonics
+					}
+				);
+				setPathResult(result);
+			} catch (error) {
+				console.error("Pathfinding error:", error);
+				setPathResult({
+					found: false,
+					error: error.message
+				});
+			} finally {
+				setIsSearching(false);
+			}
+		}, 100);
+	};
+
+	return (
+		<div className="pathfinding-container">
+			<h2 className="content-title">Frequency Pathfinding</h2>
+			<p className="content-description">
+				Find the shortest path between two frequencies using harmonic relationships and octave divisions.
+			</p>
+
+			{/* Input Parameters */}
+			<div className="pathfinding-inputs">
+				<div className="pathfinding-row">
+					<div className="pathfinding-group">
+						<label>Source Frequency (Hz)</label>
+						<input
+							type="number"
+							value={sourceFreq}
+							onChange={(e) => setSourceFreq(e.target.value)}
+							min="20"
+							max="20000"
+							step="0.1"
+						/>
+					</div>
+					<div className="pathfinding-group">
+						<label>Target Frequency (Hz)</label>
+						<input
+							type="number"
+							value={targetFreq}
+							onChange={(e) => setTargetFreq(e.target.value)}
+							min="20"
+							max="20000"
+							step="0.1"
+						/>
+					</div>
+				</div>
+
+				<div className="pathfinding-row">
+					<div className="pathfinding-group">
+						<label>Tolerance (%)</label>
+						<input
+							type="range"
+							min="0"
+							max="10"
+							step="0.1"
+							value={tolerance}
+							onChange={(e) => setTolerance(parseFloat(e.target.value))}
+						/>
+						<span className="range-value">{tolerance.toFixed(1)}%</span>
+					</div>
+					<div className="pathfinding-group">
+						<label>Max Steps</label>
+						<input
+							type="number"
+							value={maxSteps}
+							onChange={(e) => setMaxSteps(e.target.value)}
+							min="1"
+							max="20"
+						/>
+					</div>
+				</div>
+
+				<div className="pathfinding-row">
+					<div className="pathfinding-group">
+						<label>Max Recursion Depth</label>
+						<input
+							type="number"
+							value={maxRecursionDepth}
+							onChange={(e) => setMaxRecursionDepth(e.target.value)}
+							min="1"
+							max="5"
+						/>
+					</div>
+					<div className="pathfinding-group">
+						<label>Max Frequencies to Explore</label>
+						<input
+							type="number"
+							value={maxFrequencies}
+							onChange={(e) => setMaxFrequencies(e.target.value)}
+							min="8"
+							max="100"
+						/>
+					</div>
+				</div>
+
+				<div className="pathfinding-row">
+					<div className="pathfinding-group">
+						<label className="checkbox-label">
+							<input
+								type="checkbox"
+								checked={useSubharmonics}
+								onChange={(e) => setUseSubharmonics(e.target.checked)}
+							/>
+							Use Full Subharmonics (÷2,÷3,÷5,÷7,÷11,÷13) instead of Octaves Only (÷2,÷4,÷8)
+						</label>
+					</div>
+				</div>
+
+				<div className="pathfinding-actions">
+					<button 
+						className="search-btn"
+						onClick={handleSearch}
+						disabled={isSearching}
+					>
+						{isSearching ? 'Searching...' : 'Find Shortest Path'}
+					</button>
+				</div>
+			</div>
+
+			{/* Results */}
+			{pathResult && (
+				<div className="pathfinding-results">
+					{pathResult.found ? (
+						<>
+							<div className="result-summary">
+								<h3 className="result-title">✅ Path Found!</h3>
+								<div className="result-stats">
+									<div className="stat">
+										<span className="stat-label">Total Steps:</span>
+										<span className="stat-value">{pathResult.totalSteps}</span>
+									</div>
+									<div className="stat">
+										<span className="stat-label">Trees Generated:</span>
+										<span className="stat-value">{pathResult.treeCount}</span>
+									</div>
+									<div className="stat">
+										<span className="stat-label">Final Error:</span>
+										<span className="stat-value">{(pathResult.finalError * 100).toFixed(4)}%</span>
+									</div>
+									<div className="stat">
+										<span className="stat-label">Frequencies Explored:</span>
+										<span className="stat-value">{pathResult.exploredFrequencies}</span>
+									</div>
+								</div>
+							</div>
+
+							<div className="path-visualization">
+								<h4>Path Steps:</h4>
+								<div className="path-steps">
+									{pathResult.path.map((step, index) => (
+										<div key={index} className="path-step">
+											<div className="step-number">{index}</div>
+											<div className="step-content">
+												<div className="step-frequency">{step.frequency.toFixed(2)} Hz</div>
+												<div className="step-action">{step.step}</div>
+											</div>
+											{index < pathResult.path.length - 1 && (
+												<div className="step-arrow">→</div>
+											)}
+										</div>
+									))}
+								</div>
+							</div>
+						</>
+					) : (
+						<div className="result-summary">
+							<h3 className="result-title">❌ No Path Found</h3>
+							<p className="result-reason">
+								{pathResult.reason || pathResult.error || "Could not find a path within the specified constraints."}
+							</p>
+							<p className="result-suggestion">
+								Try increasing the tolerance, max steps, max recursion depth, or max frequencies to explore.
+							</p>
+							{pathResult.exploredFrequencies && (
+								<p className="result-stats-text">
+									Explored {pathResult.exploredFrequencies} frequencies before stopping.
+								</p>
+							)}
+						</div>
+					)}
+				</div>
+			)}
+		</div>
+	);
+};
+
 // Simplified utility functions for creating hierarchical data
 const createFrequencyTree = (f, maxLevel = 2, maxChildren = 5, mode = "harmonic", customRatios = null) => {
 	// Create the root node (base frequency)
@@ -642,7 +1021,7 @@ const SideView = ({ structure, baseFreq, nHarmonics, mode }) => {
 		}
 		h2Groups[setKey].push(freq.frequency);
 	});
-	
+
 // Sort H^2 groups and add to frequency sets - FIXED NUMERIC SORTING
 	Object.keys(h2Groups).sort((a, b) => {
 		// Extract indices from strings like "H^2[0,1]" and "H^2[1,0]"
@@ -1443,7 +1822,7 @@ const HarmonicFrequencyExplorer = () => {
 	const [closePairs, setClosePairs] = useState([]);
 	const [ratios, setRatios] = useState([]);
 	const [loading, setLoading] = useState(false);
-	const [currentTab, setCurrentTab] = useState('tree');
+	const [currentTab, setCurrentTab] = useState('pathfinding');
 	const [treeData, setTreeData] = useState(null);
 
 	useEffect(() => {
@@ -1549,28 +1928,25 @@ const HarmonicFrequencyExplorer = () => {
 
 	return (
 		<div className="app" style={appStyles}>
-			<h1 className="app-title">Hypokei Explorer</h1>
+			<h1 className="app-title">Harmonic Frequency Explorer</h1>
 			
 			{/* About Section */}
 			<div className="window about-window">
-				<h2 className="section-title">The Hypokei Function</h2>
+				<h2 className="section-title">The Recursive Harmonic Function</h2>
 				<p>This tool explores recursive harmonic relationships in frequency space, allowing you to:</p>
 				<ul>
 					<li>Generate frequency sets using harmonic series, Just Intonation ratios, 12-tone equal temperament, or custom ratios</li>
 					<li>Apply recursive transformations to explore complex harmonic structures</li>
 					<li>Explore the convergence of acoustic physics and musical harmony</li>
 					<li>Visualize hierarchical relationships between frequencies</li>
-					<li>Use a custom sequence of numbers and explore the relationships between iterations of the set (for example, the Fibonacci Sequence)</li>
+					<li><strong>Find shortest paths between any two frequencies using harmonic navigation</strong></li>
 				</ul>
 				<p>
-				Everything has a fundamental frequency, and with that frequency comes a set of harmonics which has a relationship with every other tone that could exist. This is also true for musical scales.
-				This tool helps to visualize these connections.
+				Everything has a fundamental frequency, and with that frequency comes a set of harmonics which has a relationship with every other tone that could exist. This tool
+				helps to visualize these connections.
 				</p>
-				<p>	
-				For an immediate idea of what it is doing, check the "Just Intonation" setting and then "12-tone Equal Temperament" (the modern music scale) in the Log Scale on Side View. 
-				Note how the method of generating a scale have very different structures.
-				</p>
-				<p>The notation H^n(f) represents n recursive applications of the harmonic function to the base frequency f. See the paper for more details.</p>
+				<p>The notation H^n(f) represents n recursive applications of the harmonic function to the base frequency f.</p>
+				<p><strong>Pathfinding:</strong> Uses breadth-first search to find the minimum number of steps between two frequencies via harmonic trees and octave divisions.</p>
 				<p><strong>Tree View:</strong> Each frequency node can be expanded to show its harmonic children. Colors represent different recursion levels (H^0, H^1, etc.). Click any frequency to explore its recursive harmonic structure. Capped at 3 levels.</p>
 				<p><strong>Side View:</strong> Shows all generated frequencies plotted on a linear or logarithmic scale, color-coded by recursion level.</p>
 			</div>
@@ -1677,6 +2053,12 @@ const HarmonicFrequencyExplorer = () => {
 			<div className="window main-window">
 				<div className="tabs">
 					<button 
+						className={`tab ${currentTab === 'pathfinding' ? 'active' : ''}`}
+						onClick={() => setCurrentTab('pathfinding')}
+					>
+						Frequency Pathfinding
+					</button>
+					<button 
 						className={`tab ${currentTab === 'tree' ? 'active' : ''}`}
 						onClick={() => setCurrentTab('tree')}
 					>
@@ -1718,6 +2100,13 @@ const HarmonicFrequencyExplorer = () => {
 					<div className="loading">Loading calculations...</div>
 				) : (
 					<div className="content">
+						{currentTab === 'pathfinding' && (
+							<FrequencyPathfinding 
+								mode={mode}
+								customRatios={mode === "custom" ? customRatios : null}
+							/>
+						)}
+						
 						{currentTab === 'tree' && treeData && (
 							<HierarchicalTree 
 								data={treeData} 
